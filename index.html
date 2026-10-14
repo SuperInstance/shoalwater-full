@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shoalwater Full — the whole Sound, as much of it as your device can hold</title>
+<meta name="description" content="The full-extent Sitka Sound Region Pack: 3,266 verified quantized-mesh tiles from 50,745,068 soundings, rendered in your browser at whatever fidelity your device can use — overview first, finer tiles streamed as capacity allows.">
+<style>
+  :root{
+    --bg:#0a1620; --bg2:#0e1f2e; --panel:#10293d; --line:#1e4258;
+    --ink:#dcecf5; --dim:#8fb2c6; --accent:#57c7e3; --good:#5fd68a;
+    --warn:#e8b34b; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  #stage{position:relative;height:100svh;min-height:520px;overflow:hidden;background:#071420}
+  #stage canvas{display:block}
+  .hud{position:absolute;z-index:5;color:var(--ink)}
+  .hud.title{top:14px;left:16px;pointer-events:none}
+  .hud.title .kicker{color:var(--accent);font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase}
+  .hud.title h1{font-size:26px;margin:2px 0 0;line-height:1.1}
+  .hud.title .sub{color:var(--dim);font-size:13px;max-width:360px}
+  .hud.bar{left:50%;transform:translateX(-50%);bottom:12px;display:flex;gap:10px;flex-wrap:wrap;
+    justify-content:center;width:min(96vw,920px)}
+  .ctl{background:rgba(13,32,47,.88);border:1px solid var(--line);border-radius:12px;
+    padding:8px 12px;display:flex;align-items:center;gap:8px;font-size:13px;backdrop-filter:blur(4px)}
+  .ctl .lbl{color:var(--dim);font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+  .seg{display:flex;gap:4px}
+  .seg button{background:#0a1f31;color:var(--dim);border:1px solid var(--line);border-radius:8px;
+    padding:5px 10px;font-size:13px;cursor:pointer}
+  .seg button.on{color:#04121c;background:var(--accent);border-color:var(--accent);font-weight:600}
+  .tgl{background:#0a1f31;color:var(--dim);border:1px solid var(--line);border-radius:8px;
+    padding:5px 10px;font-size:13px;cursor:pointer}
+  .tgl.on{color:#5fd68a;border-color:#5fd68a}
+  input[type=range]{width:110px;accent-color:var(--accent)}
+  .hud.readout{right:16px;bottom:76px;text-align:right;font-family:var(--mono);font-size:12.5px;
+    color:var(--dim);pointer-events:none;text-shadow:0 1px 3px #000}
+  .hud.readout b{color:var(--ink)}
+  #loading{position:absolute;inset:0;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;
+    color:var(--dim);font-family:var(--mono);font-size:14px;z-index:4;background:#071420;text-align:center;padding:0 20px}
+  #progress{position:absolute;left:50%;transform:translateX(-50%);top:14px;z-index:6;display:none;
+    background:rgba(13,32,47,.88);border:1px solid var(--line);border-radius:999px;padding:6px 14px;
+    font-family:var(--mono);font-size:12px;color:var(--dim)}
+  #progress b{color:var(--ink)}
+  #nogl{position:absolute;inset:auto 16px 76px 16px;z-index:6;display:none;background:#3d1420;
+    border:1px solid #7a2d3f;border-radius:10px;padding:12px 16px;font-size:14px}
+  .wrap{max-width:880px;margin:0 auto;padding:8px 20px 64px}
+  h2{font-size:24px;margin:44px 0 10px;border-bottom:1px solid var(--line);padding-bottom:6px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 22px;margin:18px 0}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:15px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--dim);font-weight:600}
+  td.num{font-family:var(--mono);white-space:nowrap}
+  code{font-family:var(--mono);background:#0a1a28;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:14px}
+  a{color:var(--accent)}
+  ul{padding-left:22px} li{margin:5px 0}
+  footer{margin-top:56px;padding-top:16px;border-top:1px solid var(--line);color:var(--dim);font-size:13.5px}
+  .muted{color:var(--dim)}
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div id="loading"><div>Sizing up this device…</div><div id="loadDetail" style="font-size:12px"></div></div>
+  <div id="progress"></div>
+  <div class="hud title">
+    <div class="kicker">SuperInstance · Shoalwater Full</div>
+    <h1>The whole Sound, <span style="color:var(--dim);font-weight:300">all of it your device can hold</span></h1>
+    <div class="sub">The full-extent pack — <b>3,266 tiles</b> from 50,745,068 soundings —
+    decoded and rendered in your browser. It opens on the overview and refines
+    itself to whatever this device can honestly run: a GPU and memory to spare
+    gets every tile; a small phone gets a true chart it can actually hold.
+    Depths as exported; datum unverified; <b>not for navigation</b>.</div>
+  </div>
+  <div class="hud readout" id="readout"></div>
+  <div id="nogl">WebGL isn't available in this browser, so the live terrain
+  can't start. The receipts below still stand.</div>
+  <div class="hud bar">
+    <div class="ctl"><span class="lbl">Capacity</span>
+      <div class="seg" id="tiers">
+        <button data-tier="light">Light · z1</button>
+        <button data-tier="standard">Standard · z2</button>
+        <button data-tier="full">Full · z3</button>
+      </div>
+      <span id="tierNote" style="font-size:12px;color:var(--dim)"></span>
+    </div>
+    <div class="ctl"><span class="lbl">Tide</span>
+      <input type="range" id="tide" min="-1.5" max="4" step="0.1" value="1.4">
+      <span id="tideVal" style="font-family:var(--mono)">+1.4 m</span>
+    </div>
+    <div class="ctl">
+      <button class="tgl on" id="tglWater">Water</button>
+      <button class="tgl on" id="tglConf">Confidence</button>
+      <button class="tgl" id="tglSpin">Spin</button>
+      <div class="seg" id="exagg">
+        <button data-x="1" class="on">×1</button><button data-x="2">×2 relief</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<h2>Why this repo exists</h2>
+<p>The Shoalwater game and explorer live in
+<a href="https://github.com/SuperInstance/shoalwater">SuperInstance/shoalwater</a> —
+a small project that works beautifully at small scale, and stays that way.
+This is its heavy sibling: the <b>entire survey extent at full fidelity</b>,
+253 MB of verified tiles, with a viewer that adapts to the machine in front
+of it instead of pretending every device is the same.</p>
+
+<h2>How the adaptation works</h2>
+<ul>
+  <li><b>Probe first.</b> Before fetching anything heavy, the page measures the
+  device: GPU rendering available, CPU cores, device memory, screen size,
+  connection speed, and any data-saver setting.</li>
+  <li><b>Overview instantly.</b> The z0–z1 overview (198 tiles, ~15 MB) always
+  loads — every device gets the whole Sound, truthfully.</li>
+  <li><b>Refine as capacity allows.</b> Standard devices stream z2 in the
+  background; full-capacity devices continue to z3 — centre-out, so the water
+  you are looking at sharpens first. A progress pill shows the honest state.</li>
+  <li><b>You can override.</b> The Capacity switch is yours. Asking for more
+  than the device can hold is allowed; it will simply be slow, and the page
+  will say so.</li>
+</ul>
+
+<h2>Receipts — Deployment 1, 14 October 2026</h2>
+<table>
+  <tr><th>Stage</th><th>Result</th></tr>
+  <tr><td>Grid (ProArt RTX 4050)</td><td class="num">50,745,068 soundings → 3,277 × 2,933 grid · 47.56 s</td></tr>
+  <tr><td>Pack</td><td class="num">3,266 tiles · z0 42 · z1 156 · z2 624 · z3 2,444 · every tile decode-verified · validator PASS</td></tr>
+  <tr><td>This repo</td><td class="num">the full pack, published in full at Casey's direction (2026-10-14)</td></tr>
+  <tr><td>Datum</td><td class="num">depths as exported — datum unverified, not for navigation</td></tr>
+</table>
+<p class="muted">The bake story and stage receipts live on the
+<a href="https://superinstance.github.io/shoalwater/deployment.html">Deployment 1 page</a>
+in the main repo.</p>
+
+<footer>
+  Shoalwater Full — a SuperInstance project, built in the open. Code: Apache-2.0. ·
+  <a href="https://github.com/SuperInstance/shoalwater">The game &amp; explorer</a> ·
+  <a href="https://github.com/SuperInstance/shoalwater-full">This repository</a>
+</footer>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.183.1/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.183.1/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { decodeQuantizedMeshTile } from './qm.js';
+
+const FM = 1.8288;
+const BOTTOM = { 1: 'rock', 2: 'sand', 3: 'mud' };
+const PACK = 'pack';
+const CONCURRENCY = 8;
+
+const stage = document.getElementById('stage');
+const readout = document.getElementById('readout');
+const progressEl = document.getElementById('progress');
+const loadDetail = document.getElementById('loadDetail');
+
+/* ---------- capacity probe ---------- */
+function probe() {
+  const p = { webgl2: false, webgpu: !!navigator.gpu,
+    cores: navigator.hardwareConcurrency || 2,
+    memGB: navigator.deviceMemory || null,
+    saveData: !!(navigator.connection && navigator.connection.saveData),
+    effectiveType: (navigator.connection && navigator.connection.effectiveType) || '4g',
+    smallScreen: Math.min(screen.width, screen.height) < 820 };
+  try {
+    const c = document.createElement('canvas');
+    p.webgl2 = !!c.getContext('webgl2');
+  } catch (e) { p.webgl2 = false; }
+  let tier = 'standard';
+  if (p.saveData || p.effectiveType === '2g' || p.effectiveType === 'slow-2g') tier = 'light';
+  else if (p.smallScreen && (p.memGB !== null && p.memGB <= 4)) tier = 'light';
+  else if ((p.webgpu || p.webgl2) && p.cores >= 8 && (p.memGB === null || p.memGB >= 8) && !p.smallScreen) tier = 'full';
+  else if (p.cores >= 4) tier = 'standard';
+  else tier = 'light';
+  const why = [];
+  why.push(p.webgpu ? 'WebGPU present' : (p.webgl2 ? 'WebGL2 present' : 'basic GPU'));
+  why.push(p.cores + ' cores');
+  if (p.memGB) why.push('~' + p.memGB + ' GB device memory');
+  if (p.smallScreen) why.push('small screen');
+  if (p.saveData) why.push('data saver on');
+  return { tier, why: why.join(' · '), raw: p };
+}
+const TIER_Z = { light: 1, standard: 2, full: 3 };
+const TIER_FM = { light: 10, standard: 5, full: 2 };
+
+/* ---------- renderer ---------- */
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+} catch (e) {
+  document.getElementById('nogl').style.display = 'block';
+  document.getElementById('loading').style.display = 'none';
+  throw e;
+}
+
+const index = await (await fetch(PACK + '/tiles-index.json')).json();
+const tiles = index.tiles;
+// World bounds from the index itself (projected metres).
+let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+for (const t of tiles) {
+  minX = Math.min(minX, t.westX); maxX = Math.max(maxX, t.westX + t.spanX);
+  minY = Math.min(minY, t.southY); maxY = Math.max(maxY, t.southY + t.spanY);
+}
+const extentX = maxX - minX, extentY = maxY - minY;
+const centreX = (minX + maxX) / 2, centreY = (minY + maxY) / 2;
+const extent = Math.max(extentX, extentY);
+
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(stage.clientWidth, stage.clientHeight);
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a2536);
+scene.fog = new THREE.Fog(0x0a2536, extent * 1.1, extent * 3.2);
+const camera = new THREE.PerspectiveCamera(55, stage.clientWidth / stage.clientHeight, 10, extent * 8);
+camera.position.set(centreX + extent * 0.42, extent * 0.34, -(centreY) + extent * 0.42);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(centreX, -18, -centreY);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI * 0.55;
+controls.autoRotateSpeed = 0.7;
+
+scene.add(new THREE.HemisphereLight(0xbfe3f2, 0x1c2f22, 0.95));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(centreX - extent * 0.4, extent * 0.6, -centreY + extent * 0.3);
+scene.add(sun);
+
+const terrainGroup = new THREE.Group();
+scene.add(terrainGroup);
+
+const water = new THREE.Mesh(
+  new THREE.PlaneGeometry(extentX * 1.02, extentY * 1.02),
+  new THREE.MeshStandardMaterial({ color: 0x14607e, transparent: true, opacity: 0.66,
+    roughness: 0.35, metalness: 0.05, side: THREE.DoubleSide }));
+water.rotation.x = -Math.PI / 2;
+water.position.set(centreX, 1.4, -centreY);
+scene.add(water);
+
+const terrainMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
+let state = { confidence: true };
+let current = null;
+
+/* ---------- painting (the chart's depth language, as in the main repo) ---------- */
+function paint(geo, decoded, intervalFm) {
+  const pos = geo.getAttribute('position');
+  const colors = new Float32Array(pos.count * 3);
+  const bandM = intervalFm * FM;
+  const cA = new THREE.Color(0x2e7ea6), cB = new THREE.Color(0x1d5d84);
+  const shallow = new THREE.Color(0x7fc4a8), wash = new THREE.Color(0x9a8f7a);
+  const tmp = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const depth = -pos.getY(i);
+    const band = Math.floor(Math.max(depth, 0) / bandM);
+    tmp.copy(band % 2 ? cB : cA).lerp(shallow, THREE.MathUtils.clamp(1 - depth / 42, 0, 1) * 0.55);
+    if (state.confidence && decoded.confidence) {
+      const w = 1 - decoded.confidence[i] / 255;
+      tmp.lerp(wash, w * w * 0.6);
+    }
+    colors[i * 3] = tmp.r; colors[i * 3 + 1] = tmp.g; colors[i * 3 + 2] = tmp.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+}
+
+/* ---------- level loading: concurrency-limited, centre-out ---------- */
+const levelCache = new Map();
+let loadToken = 0;
+
+async function loadLevel(z, intervalFm, onProgress) {
+  if (levelCache.has(z)) {
+    const g = levelCache.get(z);
+    for (const t of g.tiles) paint(t.mesh.geometry, t.decoded, intervalFm);
+    return g;
+  }
+  const avail = [...new Set(tiles.map(e => e.z))].sort((a, b) => a - b);
+  const useZ = avail.filter(a => a <= z).pop() ?? avail[0];
+  const entries = tiles.filter(t => t.z === useZ)
+    .map(e => ({ e, d: Math.hypot(e.westX + e.spanX / 2 - centreX, e.southY + e.spanY / 2 - centreY) }))
+    .sort((a, b) => a.d - b.d).map(x => x.e);
+  const token = ++loadToken;
+  const group = new THREE.Group();
+  const loaded = [];
+  let done = 0;
+  let cursor = 0;
+  async function worker() {
+    while (cursor < entries.length) {
+      if (token !== loadToken) return;               // superseded
+      const e = entries[cursor++];
+      try {
+        const buf = await (await fetch(`${PACK}/tiles/${e.z}/${e.x}/${e.y}.terrain`)).arrayBuffer();
+        const d = decodeQuantizedMeshTile(buf);
+        const n = d.vertexCount;
+        const pos = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) {
+          pos[i * 3] = e.westX + (d.u[i] / 32767) * e.spanX;
+          pos[i * 3 + 1] = d.height[i];
+          pos[i * 3 + 2] = -(e.southY + (d.v[i] / 32767) * e.spanY);
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        geo.setIndex(new THREE.BufferAttribute(d.indices, 1));
+        geo.computeVertexNormals();
+        paint(geo, d, intervalFm);
+        const mesh = new THREE.Mesh(geo, terrainMat);
+        group.add(mesh);
+        loaded.push({ mesh, decoded: d });
+      } catch (err) { /* a missing tile is water, not a crash */ }
+      done++;
+      if (onProgress) onProgress(done, entries.length, useZ);
+    }
+  }
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  if (token !== loadToken) return null;
+  const g = { group, tiles: loaded, useZ };
+  levelCache.set(useZ, g);
+  return g;
+}
+
+async function showLevel(z, intervalFm, label) {
+  progressEl.style.display = 'block';
+  const g = await loadLevel(z, intervalFm, (done, total, useZ) => {
+    progressEl.innerHTML = `refining <b>z${useZ}</b> · ${done}/${total} tiles`;
+  });
+  progressEl.style.display = 'none';
+  if (!g) return;
+  terrainGroup.clear();
+  terrainGroup.add(g.group);
+  current = g;
+  document.getElementById('tierNote').textContent =
+    `${label} · showing z${g.useZ} · ${g.tiles.length} tiles on stage`;
+}
+
+/* ---------- capacity flow ---------- */
+const cap = probe();
+loadDetail.textContent = cap.why;
+let activeTier = cap.tier;
+
+async function applyTier(tier, announce) {
+  activeTier = tier;
+  document.querySelectorAll('#tiers button').forEach(x =>
+    x.classList.toggle('on', x.dataset.tier === tier));
+  const maxZ = TIER_Z[tier];
+  const fm = TIER_FM[tier];
+  // Overview always — instant truth for every device.
+  await showLevel(Math.min(1, maxZ), 10, 'overview');
+  document.getElementById('loading').style.display = 'none';
+  if (maxZ > 1) await showLevel(maxZ, fm, tier);
+}
+
+document.getElementById('tiers').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button'); if (!b) return;
+  applyTier(b.dataset.tier, true);
+});
+
+await applyTier(cap.tier, false);
+document.getElementById('tierNote').textContent =
+  `auto: ${cap.tier} (${cap.why}) · showing z${current ? current.useZ : '?'}`;
+
+/* ---------- controls ---------- */
+const tide = document.getElementById('tide');
+tide.addEventListener('input', () => {
+  water.position.y = parseFloat(tide.value);
+  document.getElementById('tideVal').textContent =
+    (water.position.y >= 0 ? '+' : '') + water.position.y.toFixed(1) + ' m';
+});
+document.getElementById('tglWater').addEventListener('click', (ev) => {
+  water.visible = !water.visible; ev.target.classList.toggle('on', water.visible);
+});
+document.getElementById('tglConf').addEventListener('click', (ev) => {
+  state.confidence = !state.confidence;
+  ev.target.classList.toggle('on', state.confidence);
+  if (current) for (const t of current.tiles)
+    paint(t.mesh.geometry, t.decoded, TIER_FM[activeTier]);
+});
+document.getElementById('tglSpin').addEventListener('click', (ev) => {
+  controls.autoRotate = !controls.autoRotate;
+  ev.target.classList.toggle('on', controls.autoRotate);
+});
+document.getElementById('exagg').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#exagg button').forEach(x => x.classList.toggle('on', x === b));
+  terrainGroup.scale.y = parseFloat(b.dataset.x);
+});
+
+/* ---------- hover readout ---------- */
+const ray = new THREE.Raycaster();
+const ptr = new THREE.Vector2();
+let ptrDirty = false;
+renderer.domElement.addEventListener('pointermove', (ev) => {
+  const r = renderer.domElement.getBoundingClientRect();
+  ptr.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+  ptrDirty = true;
+});
+function updateReadout() {
+  if (!ptrDirty || !current) return;
+  ptrDirty = false;
+  ray.setFromCamera(ptr, camera);
+  const hit = ray.intersectObjects(terrainGroup.children, true)[0];
+  if (!hit || !hit.face) { readout.innerHTML = ''; return; }
+  const entry = current.tiles.find(t => t.mesh === hit.object);
+  if (!entry) return;
+  const d = entry.decoded;
+  const vi = hit.face.a;
+  const depthFm = (-d.height[vi] / FM).toFixed(1);
+  const conf = d.confidence ? d.confidence[vi] : '—';
+  const bot = d.bottomType ? (BOTTOM[d.bottomType[vi]] ?? '—') : '—';
+  readout.innerHTML = `depth <b>${depthFm} fm</b> · confidence <b>${conf}</b> · bottom <b>${bot}</b>`;
+}
+
+function loop() {
+  requestAnimationFrame(loop);
+  controls.update();
+  updateReadout();
+  renderer.render(scene, camera);
+}
+loop();
+
+addEventListener('resize', () => {
+  camera.aspect = stage.clientWidth / stage.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(stage.clientWidth, stage.clientHeight);
+});
+</script>
+</body>
+</html>
