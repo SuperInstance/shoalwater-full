@@ -165,6 +165,13 @@ const readout = document.getElementById('readout');
 const progressEl = document.getElementById('progress');
 const loadDetail = document.getElementById('loadDetail');
 
+/* Raycaster state lives up here, not with the hover section: the render
+   loop now starts before the capacity flow's awaits (see below), and its
+   first frames must not hit uninitialised declarations. */
+const ray = new THREE.Raycaster();
+const ptr = new THREE.Vector2();
+let ptrDirty = false;
+
 /* ---------- capacity probe ---------- */
 function probe() {
   const p = { webgl2: false, webgpu: !!navigator.gpu,
@@ -251,6 +258,36 @@ const terrainMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughnes
 let state = { confidence: true };
 let current = null;
 
+/* Survey-layer flags (the survey section itself is further down): showLevel
+   sets surveyNeedsLayout as levels stream in; the loop consumes it once the
+   survey layer reports ready. */
+let surveyReady = false;
+let surveyNeedsLayout = false;
+
+/* Keep the drawing buffer matched to the stage's real size. The renderer
+   is sized once at startup; if that measurement raced layout (the cold-
+   load case), the per-frame check in loop() repairs it as soon as layout
+   settles — no reload, no resize event required. Declared here, before
+   the first loop() call, so its state is initialised when loop runs. */
+let lastW = 0, lastH = 0;
+function syncSize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  if (!w || !h || (w === lastW && h === lastH)) return;
+  lastW = w; lastH = h;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+}
+
+/* Start painting NOW — background, water and lights render from this first
+   frame onward, while the index/capacity awaits below resolve and tiles
+   stream in. Previously loop() was invoked only after applyTier() had
+   awaited the overview AND the full refinement load, so the first frame
+   waited on hundreds of tile fetches: one stalled fetch on a cold cache
+   (or a canvas measured before layout settled) left a dark stage that only
+   a reload — warm cache, settled layout — ever cured. */
+loop();
+
 /* ---------- painting (the chart's depth language, as in the main repo) ---------- */
 function paint(geo, decoded, intervalFm) {
   const pos = geo.getAttribute('position');
@@ -276,7 +313,7 @@ function paint(geo, decoded, intervalFm) {
 const levelCache = new Map();
 let loadToken = 0;
 
-async function loadLevel(z, intervalFm, onProgress) {
+async function loadLevel(z, intervalFm, onProgress, onTile) {
   if (levelCache.has(z)) {
     const g = levelCache.get(z);
     for (const t of g.tiles) paint(t.mesh.geometry, t.decoded, intervalFm);
@@ -297,7 +334,12 @@ async function loadLevel(z, intervalFm, onProgress) {
       if (token !== loadToken) return;               // superseded
       const e = entries[cursor++];
       try {
-        const buf = await (await fetch(`${PACK}/tiles/${e.z}/${e.x}/${e.y}.terrain`)).arrayBuffer();
+        // A single hung connection must not stall the whole level: cap each
+        // tile fetch, after which it counts as missing (water), like any
+        // other failed fetch.
+        const fetchOpts = ('AbortSignal' in window && AbortSignal.timeout)
+          ? { signal: AbortSignal.timeout(30000) } : {};
+        const buf = await (await fetch(`${PACK}/tiles/${e.z}/${e.x}/${e.y}.terrain`, fetchOpts)).arrayBuffer();
         const d = decodeQuantizedMeshTile(buf);
         const n = d.vertexCount;
         const pos = new Float32Array(n * 3);
@@ -313,7 +355,8 @@ async function loadLevel(z, intervalFm, onProgress) {
         paint(geo, d, intervalFm);
         const mesh = new THREE.Mesh(geo, terrainMat);
         group.add(mesh);
-        loaded.push({ mesh, decoded: d });
+        loaded.push({ mesh, decoded: d, entry: e });
+        if (onTile) onTile(group, loaded, useZ);
       } catch (err) { /* a missing tile is water, not a crash */ }
       done++;
       if (onProgress) onProgress(done, entries.length, useZ);
@@ -328,14 +371,30 @@ async function loadLevel(z, intervalFm, onProgress) {
 
 async function showLevel(z, intervalFm, label) {
   progressEl.style.display = 'block';
+  let attached = false;
   const g = await loadLevel(z, intervalFm, (done, total, useZ) => {
     progressEl.innerHTML = `refining <b>z${useZ}</b> · ${done}/${total} tiles`;
+  }, (group, loadedTiles, useZ) => {
+    // Stream-in: the stage swaps to the growing level on its first tile
+    // and sharpens tile by tile, instead of holding the previous level (or,
+    // on first load, darkness) until the last tile lands.
+    if (!attached) {
+      terrainGroup.clear();
+      terrainGroup.add(group);
+      attached = true;
+    }
+    // A superseded level's group is detached by the newer swap; its late
+    // tiles must not reclaim `current`.
+    if (terrainGroup.children.includes(group)) {
+      current = { group, tiles: loadedTiles, useZ };
+      surveyNeedsLayout = true;
+    }
   });
   progressEl.style.display = 'none';
   if (!g) return;
-  terrainGroup.clear();
-  terrainGroup.add(g.group);
+  if (!attached) { terrainGroup.clear(); terrainGroup.add(g.group); }
   current = g;
+  surveyNeedsLayout = true;
   document.getElementById('tierNote').textContent =
     `${label} · showing z${g.useZ} · ${g.tiles.length} tiles on stage`;
 }
@@ -393,9 +452,6 @@ document.getElementById('exagg').addEventListener('click', (ev) => {
 });
 
 /* ---------- hover readout ---------- */
-const ray = new THREE.Raycaster();
-const ptr = new THREE.Vector2();
-let ptrDirty = false;
 renderer.domElement.addEventListener('pointermove', (ev) => {
   const r = renderer.domElement.getBoundingClientRect();
   ptr.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
@@ -419,17 +475,17 @@ function updateReadout() {
 
 function loop() {
   requestAnimationFrame(loop);
+  syncSize();
   controls.update();
   updateReadout();
+  if (surveyReady && surveyNeedsLayout) {
+    surveyNeedsLayout = false;
+    layoutSurveyPins();
+  }
   renderer.render(scene, camera);
 }
-loop();
 
-addEventListener('resize', () => {
-  camera.aspect = stage.clientWidth / stage.clientHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(stage.clientWidth, stage.clientHeight);
-});
+addEventListener('resize', syncSize);
 </script>
 </body>
 </html>
